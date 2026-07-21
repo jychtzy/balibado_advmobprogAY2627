@@ -6,4 +6,4 @@
 
 A flutter project that focusesnon advance project. Covering the Mobile to Web Transactions.
 
-## Lab Activity
+## Lab Activity Instance
