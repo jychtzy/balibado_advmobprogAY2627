@@ -1,25 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 
-// models
+//models
 import '../models/product.dart';
-
-// widgets
+import '../services/cart_service.dart';
 import '../widgets/custom_text.dart';
 
-// ============================================================
-// ENHANCEMENT 2: Product Details Page
-// Navigated to from ProductScreen when a product card is tapped.
-// Receives the tapped Product object directly (no re-fetching
-// needed since ProductScreen already has the full product data).
+// =====================================================================
+// FIX: "Add to Cart" used to call CartService().addToCart(0, ...) with
+// a hard-coded userId of 0, while CartScreen always displays user 1's
+// cart (see _kCurrentUserId below). That meant items added here
+// silently vanished into a cart nobody could see. Now both screens use
+// the same value — if you change one, change the other too.
 //
-// UPDATE: main image area is now a swipeable gallery covering
-// ALL of the product's pictures (thumbnail + images), and tapping
-// any picture opens a full-screen viewer to browse them all.
-// The price shown here is the same raw product.price used on the
-// home/product grid — no separate discount math, so it always
-// matches what the user saw when they tapped the card.
-// ============================================================
+// Design: colors that used to be scattered Colors.amber / theme.colorScheme.primary
+// literals now route through the constants below, matching the brand
+// indigo + accent used in cart_screen.dart and product_screen.dart.
+// =====================================================================
+
+// Colors used across this screen. cart_screen.dart, product_screen.dart,
+// and home_screen.dart each define the same values locally.
+const Color _kPrimary = Color(0xFF313376); // brand indigo
+const Color _kAccent = Color(0xFFF5A623); // CTA amber
+const Color _kAccentDark = Color(0xFFC97F00);
+const Color _kDanger = Color(0xFFE5484D);
+
+// Must match CartScreen.currentUserId in cart_screen.dart.
+const int _kCurrentUserId = 1;
+
 class ProductDetailsScreen extends StatefulWidget {
   final Product product;
   const ProductDetailsScreen({super.key, required this.product});
@@ -29,55 +37,29 @@ class ProductDetailsScreen extends StatefulWidget {
 }
 
 class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
-  late final List<String> _gallery;
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
+  final PageController _imageController = PageController();
+  int _currentImageIndex = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    // Combine thumbnail + images into one deduplicated gallery list.
-    // This shows every REAL picture the API actually returned for this
-    // product -- no duplicates, no fake "extra angles". If a product
-    // only has one photo on the backend, that's all we show; we don't
-    // fabricate additional angles that don't exist.
-    final combined = <String>[
-      if (widget.product.thumbnail.isNotEmpty) widget.product.thumbnail,
-      ...widget.product.images,
-    ];
-    _gallery = combined.toSet().toList();
-  }
+  // Combine thumbnail + images into one list so everything is swipeable
+  late final List<String> _allImages = [
+    widget.product.thumbnail,
+    ...widget.product.images.where((img) => img != widget.product.thumbnail),
+  ];
 
   @override
   void dispose() {
-    _pageController.dispose();
+    _imageController.dispose();
     super.dispose();
-  }
-
-  // Opens a full-screen, pinch-to-zoom, swipeable viewer starting
-  // at whichever picture was tapped.
-  void _openFullScreenGallery(int startIndex) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => _FullScreenGallery(
-          images: _gallery,
-          initialIndex: startIndex,
-        ),
-        fullscreenDialog: true,
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     final product = widget.product;
-    final bool hasDiscount = product.discountPercentage > 0;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     return Scaffold(
       appBar: AppBar(
-        elevation: 2,
-        automaticallyImplyLeading: true, // back button to ProductScreen
         title: CustomText(
           text: product.title,
           fontSize: 18.sp,
@@ -86,317 +68,616 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           overflow: TextOverflow.ellipsis,
         ),
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ---------------- Main swipeable image gallery ----------------
-              Stack(
-                children: [
-                  SizedBox(
-                    width: double.infinity,
-                    height: 260.h,
-                    child: _gallery.isEmpty
-                        ? Icon(Icons.image, size: 48.sp)
-                        : PageView.builder(
-                            controller: _pageController,
-                            itemCount: _gallery.length,
-                            onPageChanged: (index) {
-                              setState(() => _currentPage = index);
-                            },
-                            itemBuilder: (context, index) {
-                              return GestureDetector(
-                                // Tap the big picture to view all pictures full-screen.
-                                onTap: () => _openFullScreenGallery(index),
-                                child: Image.network(
-                                  _gallery[index],
-                                  fit: BoxFit.cover,
-                                  width: double.infinity,
-                                  errorBuilder: (_, __, ___) =>
-                                      Icon(Icons.image, size: 48.sp),
-                                ),
-                              );
-                            },
+      body: SingleChildScrollView(
+        padding: EdgeInsets.only(bottom: 20.h),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Image carousel - edge to edge
+            ClipRRect(
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(28.r),
+                bottomRight: Radius.circular(28.r),
+              ),
+              child: SizedBox(
+                height: 260.h,
+                child: Stack(
+                  alignment: Alignment.bottomCenter,
+                  children: [
+                    PageView.builder(
+                      controller: _imageController,
+                      itemCount: _allImages.length,
+                      onPageChanged: (index) {
+                        setState(() {
+                          _currentImageIndex = index;
+                        });
+                      },
+                      itemBuilder: (context, index) {
+                        return Image.network(
+                          _allImages[index],
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            color: theme.colorScheme.surfaceVariant,
+                            child: const Icon(Icons.image, size: 48),
                           ),
-                  ),
-                  // Picture counter badge, e.g. "2 / 5"
-                  if (_gallery.length > 1)
-                    Positioned(
-                      right: 12.w,
-                      bottom: 12.h,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                            horizontal: 10.w, vertical: 4.h),
+                        );
+                      },
+                    ),
+                    // Soft gradient scrim at the bottom so dot indicators stay visible on any image
+                    if (_allImages.length > 1)
+                      Container(
+                        height: 60.h,
+                        width: double.infinity,
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.6),
-                          borderRadius: BorderRadius.circular(12.r),
-                        ),
-                        child: CustomText(
-                          text: '${_currentPage + 1} / ${_gallery.length}',
-                          fontSize: 12.sp,
-                          fontWeight: FontWeight.w600,
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withOpacity(0.35),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                ],
-              ),
-
-              // ---------------- Thumbnail strip (tap = jump + view all) ----------------
-              if (_gallery.length > 1)
-                SizedBox(
-                  height: 80.h,
-                  child: ListView.separated(
-                    padding:
-                        EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-                    scrollDirection: Axis.horizontal,
-                    itemCount: _gallery.length,
-                    separatorBuilder: (_, __) => SizedBox(width: 8.w),
-                    itemBuilder: (context, index) {
-                      final bool isSelected = index == _currentPage;
-                      return GestureDetector(
-                        onTap: () {
-                          _pageController.animateToPage(
-                            index,
-                            duration: const Duration(milliseconds: 250),
-                            curve: Curves.easeInOut,
-                          );
-                        },
-                        onLongPress: () => _openFullScreenGallery(index),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8.r),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: isSelected
-                                    ? Theme.of(context).primaryColor
-                                    : Colors.transparent,
-                                width: 2,
+                    if (_allImages.length > 1)
+                      Padding(
+                        padding: EdgeInsets.only(bottom: 14.h),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: List.generate(
+                            _allImages.length,
+                            (index) => AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              margin: EdgeInsets.symmetric(horizontal: 3.w),
+                              width: _currentImageIndex == index ? 20.w : 6.w,
+                              height: 6.h,
+                              decoration: BoxDecoration(
+                                color: _currentImageIndex == index
+                                    ? Colors.white
+                                    : Colors.white.withOpacity(0.5),
+                                borderRadius: BorderRadius.circular(3.r),
                               ),
                             ),
-                            child: Image.network(
-                              _gallery[index],
-                              width: 80.w,
-                              height: 80.h,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                  Icon(Icons.image, size: 24.sp),
-                            ),
                           ),
                         ),
-                      );
-                    },
-                  ),
-                )
-              // Honest fallback: if the API only gave us one real photo
-              // for this product, say so instead of implying there are
-              // more angles to browse.
-              else if (_gallery.length == 1)
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-                  child: CustomText(
-                    text: 'Only one photo available for this product.',
-                    fontSize: 12.sp,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 12.h),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Title + brand
-                    CustomText(
-                      text: product.title,
-                      fontSize: 20.sp,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    SizedBox(height: 4.h),
-                    if (product.brand.isNotEmpty)
-                      CustomText(
-                        text: product.brand,
-                        fontSize: 13.sp,
-                        fontWeight: FontWeight.w400,
-                      ),
-
-                    SizedBox(height: 12.h),
-
-                    // ---------------- Price ----------------
-                    // Shows the SAME product.price used on the home/product
-                    // grid card, so the price here always matches what the
-                    // user saw before tapping. Discount %, if any, is shown
-                    // as a secondary badge only -- it does not change the
-                    // headline price.
-                    Row(
-                      children: [
-                        CustomText(
-                          text: '\$${product.price.toStringAsFixed(2)}',
-                          fontSize: 20.sp,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        if (hasDiscount) ...[
-                          SizedBox(width: 8.w),
-                          Container(
-                            padding: EdgeInsets.symmetric(
-                                horizontal: 6.w, vertical: 2.h),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(6.r),
-                              border: Border.all(),
-                            ),
-                            child: CustomText(
-                              text:
-                                  '-${product.discountPercentage.toStringAsFixed(0)}%',
-                              fontSize: 12.sp,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-
-                    SizedBox(height: 8.h),
-
-                    // Rating + stock + availability
-                    Row(
-                      children: [
-                        Icon(Icons.star, size: 16.sp, color: Colors.amber),
-                        SizedBox(width: 4.w),
-                        CustomText(
-                          text: product.rating.toStringAsFixed(1),
-                          fontSize: 13.sp,
-                        ),
-                        SizedBox(width: 16.w),
-                        CustomText(
-                          text: '${product.stock} in stock',
-                          fontSize: 13.sp,
-                        ),
-                        SizedBox(width: 16.w),
-                        CustomText(
-                          text: product.availabilityStatus,
-                          fontSize: 13.sp,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ],
-                    ),
-
-                    Divider(height: 32.h),
-
-                    // Description
-                    CustomText(
-                      text: 'Description',
-                      fontSize: 15.sp,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    SizedBox(height: 4.h),
-                    CustomText(
-                      text: product.description,
-                      fontSize: 13.sp,
-                      fontWeight: FontWeight.w400,
-                    ),
-
-                    Divider(height: 32.h),
-
-                    // Details table (category, sku, weight, dimensions, tags)
-                    CustomText(
-                      text: 'Product Details',
-                      fontSize: 15.sp,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    SizedBox(height: 8.h),
-                    _detailRow('Category', product.category),
-                    _detailRow('SKU', product.sku),
-                    _detailRow('Weight', '${product.weight} kg'),
-                    _detailRow(
-                      'Dimensions',
-                      '${product.dimensions.width} x '
-                      '${product.dimensions.height} x '
-                      '${product.dimensions.depth} cm',
-                    ),
-                    if (product.tags.isNotEmpty)
-                      _detailRow('Tags', product.tags.join(', ')),
-                    _detailRow('Min. Order Qty', '${product.minimumOrderQuantity}'),
-                    _detailRow('Warranty', product.warrantyInformation),
-                    _detailRow('Shipping', product.shippingInformation),
-                    _detailRow('Return Policy', product.returnPolicy),
-                    if (product.meta.barcode.isNotEmpty)
-                      _detailRow('Barcode', product.meta.barcode),
-
-                    Divider(height: 32.h),
-
-                    // Reviews
-                    CustomText(
-                      text: 'Reviews (${product.reviews.length})',
-                      fontSize: 15.sp,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    SizedBox(height: 8.h),
-                    if (product.reviews.isEmpty)
-                      CustomText(
-                        text: 'No reviews yet.',
-                        fontSize: 13.sp,
-                      )
-                    else
-                      Column(
-                        children: product.reviews.map((review) {
-                          return Padding(
-                            padding: EdgeInsets.only(bottom: 12.h),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    CustomText(
-                                      text: review.reviewerName,
-                                      fontSize: 13.sp,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                    SizedBox(width: 8.w),
-                                    Row(
-                                      children: List.generate(
-                                        5,
-                                        (i) => Icon(
-                                          i < review.rating
-                                              ? Icons.star
-                                              : Icons.star_border,
-                                          size: 12.sp,
-                                          color: Colors.amber,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(height: 2.h),
-                                CustomText(
-                                  text: review.comment,
-                                  fontSize: 12.sp,
-                                  fontWeight: FontWeight.w400,
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
                       ),
                   ],
                 ),
               ),
-            ],
-          ),
+            ),
+
+            // Floating price + rating card that overlaps the image bottom
+            Transform.translate(
+              offset: Offset(0, -22.h),
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16.w),
+                child: _card(
+                  context,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            CustomText(
+                              text: '\$${product.price.toStringAsFixed(2)}',
+                              fontSize: 20.sp,
+                              fontWeight: FontWeight.w800,
+                            ),
+                            if (product.discountPercentage > 0) ...[
+                              SizedBox(width: 8.w),
+                              Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 7.w,
+                                  vertical: 3.h,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _kDanger.withValues(
+                                    alpha: isDark ? 0.28 : 0.1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8.r),
+                                ),
+                                child: CustomText(
+                                  text:
+                                      '-${product.discountPercentage.toStringAsFixed(0)}%',
+                                  fontSize: 12.sp,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 10.w,
+                          vertical: 6.h,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _kAccent.withOpacity(isDark ? 0.2 : 0.12),
+                          borderRadius: BorderRadius.circular(12.r),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.star_rounded,
+                              size: 16,
+                              color: _kAccentDark,
+                            ),
+                            SizedBox(width: 3.w),
+                            CustomText(
+                              text: '${product.rating}',
+                              fontSize: 13.sp,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+            // Negative margin above compensates for the overlap
+            Padding(
+              padding: EdgeInsets.fromLTRB(16.w, 0, 16.w, 0),
+              child: Transform.translate(
+                offset: Offset(0, -10.h),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Thumbnail strip
+                    if (_allImages.length > 1) ...[
+                      SizedBox(
+                        height: 64.h,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: _allImages.length,
+                          separatorBuilder: (_, __) => SizedBox(width: 8.w),
+                          itemBuilder: (context, index) {
+                            final isSelected = _currentImageIndex == index;
+                            return GestureDetector(
+                              onTap: () {
+                                _imageController.animateToPage(
+                                  index,
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeInOut,
+                                );
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12.r),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? _kPrimary
+                                        : Colors.transparent,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(10.r),
+                                  child: Image.network(
+                                    _allImages[index],
+                                    width: 60.w,
+                                    height: 60.h,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) =>
+                                        const Icon(Icons.image, size: 24),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      SizedBox(height: 16.h),
+                    ],
+
+                    // Title + description card
+                    _card(
+                      context,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CustomText(
+                            text: product.title,
+                            fontSize: 20.sp,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          SizedBox(height: 8.h),
+                          CustomText(
+                            text: product.description,
+                            fontSize: 14.sp,
+                            letterSpacing: 0.1,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    SizedBox(height: 14.h),
+
+                    // Add to Cart button
+                    SizedBox(
+                      width: double.infinity,
+                      child: Material(
+                        color: _kAccent,
+                        borderRadius: BorderRadius.circular(12.r),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(12.r),
+                          onTap: () async {
+                          try {
+                            // FIX: was hard-coded to userId 0 — now uses
+                            // _kCurrentUserId, matching cart_screen.dart.
+                            await CartService().addToCart(_kCurrentUserId, [
+                              {'id': product.id, 'quantity': 1},
+                            ]);
+
+                            if (!context.mounted) return;
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  '${product.title} added to cart!',
+                                ),
+                              ),
+                            );
+                          } catch (e) {
+                            if (!context.mounted) return;
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Failed to add item to cart'),
+                              ),
+                            );
+                          }
+                          },
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(vertical: 14.h),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.add_shopping_cart,
+                                  color: Colors.black87,
+                                ),
+                                SizedBox(width: 8.w),
+                                Text(
+                                  'Add to Cart',
+                                  style: TextStyle(
+                                    fontSize: 15.sp,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    SizedBox(height: 14.h),
+
+                    // Details card
+                    _card(
+                      context,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _sectionHeader(
+                            context,
+                            Icons.info_outline,
+                            'Details',
+                          ),
+                          SizedBox(height: 12.h),
+                          _infoRow(
+                            context,
+                            Icons.storefront_outlined,
+                            'Brand',
+                            product.brand,
+                          ),
+                          _divider(theme),
+                          _infoRow(
+                            context,
+                            Icons.category_outlined,
+                            'Category',
+                            product.category,
+                          ),
+                          _divider(theme),
+                          _infoRow(
+                            context,
+                            Icons.qr_code_2_outlined,
+                            'SKU',
+                            product.sku,
+                          ),
+                          _divider(theme),
+                          _infoRow(
+                            context,
+                            Icons.inventory_2_outlined,
+                            'Stock',
+                            '${product.stock}',
+                          ),
+                          _divider(theme),
+                          _infoRow(
+                            context,
+                            Icons.scale_outlined,
+                            'Weight',
+                            '${product.weight} g',
+                          ),
+                          _divider(theme),
+                          _infoRow(
+                            context,
+                            Icons.straighten_outlined,
+                            'Dimensions',
+                            '${product.dimensions.width} x ${product.dimensions.height} x ${product.dimensions.depth} cm',
+                          ),
+                          _divider(theme),
+                          _infoRow(
+                            context,
+                            Icons.shopping_bag_outlined,
+                            'Min. Order Qty',
+                            '${product.minimumOrderQuantity}',
+                          ),
+                          _divider(theme),
+                          _infoRow(
+                            context,
+                            Icons.check_circle_outline,
+                            'Availability',
+                            product.availabilityStatus,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Tags card
+                    if (product.tags.isNotEmpty) ...[
+                      SizedBox(height: 14.h),
+                      _card(
+                        context,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _sectionHeader(
+                              context,
+                              Icons.sell_outlined,
+                              'Tags',
+                            ),
+                            SizedBox(height: 12.h),
+                            Wrap(
+                              spacing: 8.w,
+                              runSpacing: 8.h,
+                              children: product.tags
+                                  .map(
+                                    (tag) => Container(
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: 12.w,
+                                        vertical: 7.h,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _kPrimary
+                                            .withOpacity(isDark ? 0.25 : 0.1),
+                                        borderRadius: BorderRadius.circular(
+                                          30.r,
+                                        ),
+                                      ),
+                                      child: CustomText(
+                                        text: tag,
+                                        fontSize: 12.sp,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  )
+                                  .toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    SizedBox(height: 14.h),
+
+                    // Warranty & shipping card
+                    _card(
+                      context,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _sectionHeader(
+                            context,
+                            Icons.local_shipping_outlined,
+                            'Warranty & Shipping',
+                          ),
+                          SizedBox(height: 12.h),
+                          _infoRow(
+                            context,
+                            Icons.verified_user_outlined,
+                            'Warranty',
+                            product.warrantyInformation,
+                          ),
+                          _divider(theme),
+                          _infoRow(
+                            context,
+                            Icons.local_shipping_outlined,
+                            'Shipping',
+                            product.shippingInformation,
+                          ),
+                          _divider(theme),
+                          _infoRow(
+                            context,
+                            Icons.replay_outlined,
+                            'Return Policy',
+                            product.returnPolicy,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    SizedBox(height: 14.h),
+
+                    // Reviews card
+                    _card(
+                      context,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _sectionHeader(
+                            context,
+                            Icons.reviews_outlined,
+                            'Reviews (${product.reviews.length})',
+                          ),
+                          SizedBox(height: 12.h),
+                          if (product.reviews.isEmpty)
+                            CustomText(text: 'No reviews yet.', fontSize: 13.sp)
+                          else
+                            ...product.reviews.map(
+                              (review) => Container(
+                                margin: EdgeInsets.only(bottom: 10.h),
+                                padding: EdgeInsets.all(12.r),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.surfaceVariant
+                                      .withOpacity(isDark ? 0.35 : 0.55),
+                                  borderRadius: BorderRadius.circular(14.r),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            CircleAvatar(
+                                              radius: 14.r,
+                                              backgroundColor:
+                                                  _kPrimary.withOpacity(0.15),
+                                              child: CustomText(
+                                                text:
+                                                    review
+                                                        .reviewerName
+                                                        .isNotEmpty
+                                                    ? review.reviewerName[0]
+                                                          .toUpperCase()
+                                                    : '?',
+                                                fontSize: 12.sp,
+                                                fontWeight: FontWeight.w700,
+                                              ),
+                                            ),
+                                            SizedBox(width: 8.w),
+                                            CustomText(
+                                              text: review.reviewerName,
+                                              fontSize: 13.sp,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ],
+                                        ),
+                                        Row(
+                                          children: List.generate(
+                                            5,
+                                            (i) => Icon(
+                                              i < review.rating
+                                                  ? Icons.star_rounded
+                                                  : Icons.star_outline_rounded,
+                                              size: 15,
+                                              color: _kAccentDark,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(height: 8.h),
+                                    CustomText(
+                                      text: review.comment,
+                                      fontSize: 13.sp,
+                                    ),
+                                    SizedBox(height: 6.h),
+                                    CustomText(
+                                      text: review.date.split('T').first,
+                                      fontSize: 11.sp,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // Small helper for the label/value detail rows.
-  Widget _detailRow(String label, String value) {
-    if (value.trim().isEmpty) return const SizedBox.shrink();
+  // Theme's card style
+  Widget _card(BuildContext context, {required Widget child}) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(16.r),
+      decoration: BoxDecoration(
+        color: theme.cardColor,
+        borderRadius: BorderRadius.circular(20.r),
+        border: isDark
+            ? Border.all(color: Colors.white.withOpacity(0.08))
+            : null,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.25 : 0.06),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
+
+  // Section header with the icon
+  Widget _sectionHeader(BuildContext context, IconData icon, String title) {
+    return Row(
+      children: [
+        Container(
+          padding: EdgeInsets.all(6.r),
+          decoration: BoxDecoration(
+            color: _kPrimary.withOpacity(0.12),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 16.sp, color: _kPrimary),
+        ),
+        SizedBox(width: 8.w),
+        CustomText(text: title, fontSize: 15.sp, fontWeight: FontWeight.bold),
+      ],
+    );
+  }
+
+  // Info row with a small leading icon for quicker visual scanning
+  Widget _infoRow(
+    BuildContext context,
+    IconData icon,
+    String label,
+    String value,
+  ) {
+    final theme = Theme.of(context);
     return Padding(
-      padding: EdgeInsets.only(bottom: 6.h),
+      padding: EdgeInsets.symmetric(vertical: 8.h),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Icon(
+            icon,
+            size: 16.sp,
+            color: theme.iconTheme.color?.withOpacity(0.6),
+          ),
+          SizedBox(width: 10.w),
           SizedBox(
-            width: 110.w,
+            width: 100.w,
             child: CustomText(
               text: label,
               fontSize: 13.sp,
@@ -404,83 +685,18 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             ),
           ),
           Expanded(
-            child: CustomText(
-              text: value,
-              fontSize: 13.sp,
-              fontWeight: FontWeight.w400,
-            ),
+            child: CustomText(text: value, fontSize: 13.sp),
           ),
         ],
       ),
     );
   }
-}
 
-// ============================================================
-// Full-screen picture viewer: shows ALL of the product's pictures,
-// swipeable, with pinch-to-zoom on each one via InteractiveViewer.
-// ============================================================
-class _FullScreenGallery extends StatefulWidget {
-  final List<String> images;
-  final int initialIndex;
-  const _FullScreenGallery({required this.images, required this.initialIndex});
-
-  @override
-  State<_FullScreenGallery> createState() => _FullScreenGalleryState();
-}
-
-class _FullScreenGalleryState extends State<_FullScreenGallery> {
-  late final PageController _controller;
-  late int _index;
-
-  @override
-  void initState() {
-    super.initState();
-    _index = widget.initialIndex;
-    _controller = PageController(initialPage: widget.initialIndex);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        iconTheme: const IconThemeData(color: Colors.white),
-        title: CustomText(
-          text: '${_index + 1} / ${widget.images.length}',
-          fontSize: 16.sp,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      body: PageView.builder(
-        controller: _controller,
-        itemCount: widget.images.length,
-        onPageChanged: (i) => setState(() => _index = i),
-        itemBuilder: (context, i) {
-          return InteractiveViewer(
-            minScale: 1,
-            maxScale: 4,
-            child: Center(
-              child: Image.network(
-                widget.images[i],
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => Icon(
-                  Icons.image,
-                  size: 48.sp,
-                  color: Colors.white54,
-                ),
-              ),
-            ),
-          );
-        },
-      ),
+  Widget _divider(ThemeData theme) {
+    return Divider(
+      height: 1,
+      thickness: 1,
+      color: theme.dividerColor.withOpacity(0.15),
     );
   }
 }
