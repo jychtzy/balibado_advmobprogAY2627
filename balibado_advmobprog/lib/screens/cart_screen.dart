@@ -6,7 +6,14 @@ import '../models/product.dart';
 import '../services/cart_service.dart';
 import '../services/product_service.dart';
 import '../widgets/custom_text.dart';
-import '../screens/product_details.dart' as product_details;
+import 'details_screen.dart' as product_details;
+
+class AppColors {
+  static const Color primary = Color(0xFF2563EB);
+  static const Color danger = Color(0xFFDC2626);
+  static const Color success = Color(0xFF16A34A);
+  static const Color accent = Color(0xFFFACC15);
+}
 
 // =====================================================================
 // ENHANCEMENTS / FIXES IN THIS FILE
@@ -25,18 +32,11 @@ import '../screens/product_details.dart' as product_details;
 // Fix: swipe-to-delete now calls the service's removeFromCart, which
 //                is just a documented wrapper around
 //                updateQuantity(..., 0) — no duplicated logic.
-// Design: unified brand indigo + amber accent (defined below) instead
-//                of ad-hoc amber/black literals; clearer error/empty
-//                states; quantity stepper and "view details" separated.
+// Design: colors now come from the shared AppColors (constants/app_theme.dart)
+//                instead of a locally redefined set of consts, so this
+//                screen matches product_screen.dart / product_details.dart
+//                and respects dark mode.
 // =====================================================================
-
-// Colors used across this screen. product_screen.dart, product_details.dart,
-// and home_screen.dart each define the same values locally.
-const Color _kPrimary = Color(0xFF313376); // brand indigo
-const Color _kAccent = Color(0xFFF5A623); // CTA amber
-const Color _kDanger = Color(0xFFE5484D);
-const Color _kSuccess = Color(0xFF1F9254);
-const Color _kBackground = Color(0xFFF6F6FA);
 
 class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
@@ -131,7 +131,8 @@ class _CartScreenState extends State<CartScreen> {
       await Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => product_details.ProductDetailsScreen(product: product),
+          builder: (context) =>
+              product_details.ProductDetailsScreen(product: product),
         ),
       );
     } catch (e) {
@@ -146,47 +147,42 @@ class _CartScreenState extends State<CartScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: _kBackground,
-      child: SafeArea(
-        child: FutureBuilder<Cart?>(
-          future: _cartFuture,
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(
-                child: CircularProgressIndicator(color: _kPrimary),
-              );
-            }
+    return SafeArea(
+      child: FutureBuilder<Cart?>(
+        future: _cartFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-            if (snapshot.hasError) {
-              return _buildErrorState('${snapshot.error}');
-            }
+          if (snapshot.hasError) {
+            return _buildErrorState('${snapshot.error}');
+          }
 
-            final cart = snapshot.data;
+          final cart = snapshot.data;
 
-            if (cart == null || cart.products.isEmpty) {
-              return _buildEmptyState();
-            }
+          if (cart == null || cart.products.isEmpty) {
+            return _buildEmptyState();
+          }
 
-            _currentCart ??= cart;
+          _currentCart ??= cart;
 
-            return Column(
-              children: [
-                Expanded(
-                  child: ListView.separated(
-                    padding: EdgeInsets.all(16.r),
-                    itemCount: cart.products.length,
-                    separatorBuilder: (_, __) => SizedBox(height: 12.h),
-                    itemBuilder: (context, index) {
-                      return _buildCartItemCard(context, cart.products[index]);
-                    },
-                  ),
+          return Column(
+            children: [
+              Expanded(
+                child: ListView.separated(
+                  padding: EdgeInsets.all(16.r),
+                  itemCount: cart.products.length,
+                  separatorBuilder: (_, __) => SizedBox(height: 12.h),
+                  itemBuilder: (context, index) {
+                    return _buildCartItemCard(context, cart.products[index]);
+                  },
                 ),
-                _buildSummaryBar(context, cart),
-              ],
-            );
-          },
-        ),
+              ),
+              _buildSummaryBar(context, cart),
+            ],
+          );
+        },
       ),
     );
   }
@@ -201,30 +197,34 @@ class _CartScreenState extends State<CartScreen> {
             Container(
               padding: EdgeInsets.all(18.r),
               decoration: BoxDecoration(
-                color: _kDanger.withOpacity(0.1),
+                color: AppColors.danger.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.error_outline, size: 40.sp, color: _kDanger),
+              child: Icon(
+                Icons.error_outline,
+                size: 40.sp,
+                color: AppColors.danger,
+              ),
             ),
             SizedBox(height: 16.h),
-            CustomText(text: 'Something went wrong', fontSize: 16.sp, fontWeight: FontWeight.bold),
+            CustomText(
+              text: 'Something went wrong',
+              fontSize: 16.sp,
+              fontWeight: FontWeight.bold,
+            ),
             SizedBox(height: 6.h),
             CustomText(text: message, fontSize: 12.sp),
             SizedBox(height: 20.h),
-            MaterialButton(
+            FilledButton.icon(
               onPressed: _loadCart,
-              color: _kPrimary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12.r),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12.r),
+                ),
               ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.refresh, color: Colors.white),
-                  SizedBox(width: 8),
-                  Text('Retry', style: TextStyle(color: Colors.white)),
-                ],
-              ),
+              icon: const Icon(Icons.refresh, color: Colors.white),
+              label: const Text('Retry', style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
@@ -240,13 +240,21 @@ class _CartScreenState extends State<CartScreen> {
           Container(
             padding: EdgeInsets.all(24.r),
             decoration: BoxDecoration(
-              color: _kPrimary.withOpacity(0.08),
+              color: AppColors.primary.withValues(alpha: 0.08),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.shopping_bag_outlined, size: 60.sp, color: _kPrimary),
+            child: Icon(
+              Icons.shopping_bag_outlined,
+              size: 60.sp,
+              color: AppColors.primary,
+            ),
           ),
           SizedBox(height: 20.h),
-          CustomText(text: 'Your cart is empty', fontSize: 17.sp, fontWeight: FontWeight.bold),
+          CustomText(
+            text: 'Your cart is empty',
+            fontSize: 17.sp,
+            fontWeight: FontWeight.bold,
+          ),
           SizedBox(height: 6.h),
           CustomText(text: 'Items you add will show up here.', fontSize: 13.sp),
         ],
@@ -269,7 +277,7 @@ class _CartScreenState extends State<CartScreen> {
       onDismissed: (_) => _removeItem(item),
       background: Container(
         decoration: BoxDecoration(
-          color: _kDanger,
+          color: AppColors.danger,
           borderRadius: BorderRadius.circular(14.r),
         ),
         alignment: Alignment.centerRight,
@@ -282,11 +290,11 @@ class _CartScreenState extends State<CartScreen> {
           color: theme.cardColor,
           borderRadius: BorderRadius.circular(14.r),
           border: isDark
-              ? Border.all(color: Colors.white.withOpacity(0.08))
-              : Border.all(color: const Color(0xFFEEEEF2)),
+              ? Border.all(color: Colors.white.withValues(alpha: 0.08))
+              : Border.all(color: theme.dividerColor),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.25 : 0.04),
+              color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
               blurRadius: 10,
               offset: const Offset(0, 3),
             ),
@@ -326,16 +334,13 @@ class _CartScreenState extends State<CartScreen> {
                         style: TextStyle(
                           fontSize: 13.sp,
                           fontWeight: FontWeight.w600,
-                          color: _kPrimary,
+                          color: AppColors.primary,
                         ),
                       ),
                       if (item.discountPercentage > 0)
                         Text(
                           '${item.discountPercentage.toStringAsFixed(0)}% off \u00b7 \$${item.discountedTotal.toStringAsFixed(2)} total',
-                          style: TextStyle(
-                            fontSize: 11.sp,
-                            color: _kSuccess,
-                          ),
+                          style: TextStyle(fontSize: 11.sp, color: AppColors.success),
                         ),
                     ],
                   ),
@@ -343,7 +348,7 @@ class _CartScreenState extends State<CartScreen> {
               ],
             ),
             SizedBox(height: 10.h),
-            Divider(height: 1, color: Colors.grey.shade200),
+            Divider(height: 1, color: theme.dividerColor),
             SizedBox(height: 8.h),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -351,13 +356,13 @@ class _CartScreenState extends State<CartScreen> {
                 _buildQuantityStepper(item),
                 TextButton.icon(
                   onPressed: () => _viewProductDetails(item.id),
-                  icon: Icon(Icons.info_outline, size: 15.sp, color: _kPrimary),
+                  icon: Icon(Icons.info_outline, size: 15.sp, color: AppColors.primary),
                   label: Text(
                     'View details',
                     style: TextStyle(
                       fontSize: 12.sp,
                       fontWeight: FontWeight.w600,
-                      color: _kPrimary,
+                      color: AppColors.primary,
                     ),
                   ),
                   style: TextButton.styleFrom(
@@ -377,7 +382,7 @@ class _CartScreenState extends State<CartScreen> {
   Widget _buildQuantityStepper(CartProduct item) {
     return Container(
       decoration: BoxDecoration(
-        color: _kPrimary.withOpacity(0.08),
+        color: AppColors.primary.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(20.r),
       ),
       child: Row(
@@ -388,7 +393,7 @@ class _CartScreenState extends State<CartScreen> {
             borderRadius: BorderRadius.horizontal(left: Radius.circular(20.r)),
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
-              child: Icon(Icons.remove, size: 16.sp, color: _kPrimary),
+              child: Icon(Icons.remove, size: 16.sp, color: AppColors.primary),
             ),
           ),
           Padding(
@@ -398,7 +403,7 @@ class _CartScreenState extends State<CartScreen> {
               style: TextStyle(
                 fontSize: 13.sp,
                 fontWeight: FontWeight.w700,
-                color: _kPrimary,
+                color: AppColors.primary,
               ),
             ),
           ),
@@ -407,7 +412,7 @@ class _CartScreenState extends State<CartScreen> {
             borderRadius: BorderRadius.horizontal(right: Radius.circular(20.r)),
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: 10.w, vertical: 6.h),
-              child: Icon(Icons.add, size: 16.sp, color: _kPrimary),
+              child: Icon(Icons.add, size: 16.sp, color: AppColors.primary),
             ),
           ),
         ],
@@ -426,7 +431,7 @@ class _CartScreenState extends State<CartScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
             blurRadius: 14,
             offset: const Offset(0, -4),
           ),
@@ -442,10 +447,7 @@ class _CartScreenState extends State<CartScreen> {
               children: [
                 Text(
                   '${cart.totalProducts} item${cart.totalProducts == 1 ? '' : 's'}',
-                  style: TextStyle(
-                    fontSize: 12.sp,
-                    color: Colors.grey.shade600,
-                  ),
+                  style: TextStyle(fontSize: 12.sp, color: Colors.grey.shade600),
                 ),
                 CustomText(
                   text: '\$${cart.discountedTotal.toStringAsFixed(2)}',
@@ -459,7 +461,7 @@ class _CartScreenState extends State<CartScreen> {
               width: double.infinity,
               child: TextButton(
                 style: TextButton.styleFrom(
-                  backgroundColor: _kAccent,
+                  backgroundColor: AppColors.accent,
                   padding: EdgeInsets.symmetric(vertical: 14.h),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.r)),
                 ),

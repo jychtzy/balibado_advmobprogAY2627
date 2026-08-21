@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../constants.dart';
 import '../models/cart.dart';
 
 const String _cartApiBase = 'https://dummyjson.com';
@@ -68,9 +67,7 @@ class CartService {
       Cart? currentCart = _localCarts[userId];
 
       // Get the existing cart if we haven't loaded it yet.
-      if (currentCart == null) {
-        currentCart = await getCartByUserId(userId);
-      }
+      currentCart ??= await getCartByUserId(userId);
 
       // If there is no existing cart, use the cart returned by DummyJSON.
       if (currentCart == null) {

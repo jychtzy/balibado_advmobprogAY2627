@@ -98,7 +98,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           width: double.infinity,
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => Container(
-                            color: theme.colorScheme.surfaceVariant,
+                            color: theme.colorScheme.surfaceContainerHighest,
                             child: const Icon(Icons.image, size: 48),
                           ),
                         );
@@ -536,7 +536,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 margin: EdgeInsets.only(bottom: 10.h),
                                 padding: EdgeInsets.all(12.r),
                                 decoration: BoxDecoration(
-                                  color: theme.colorScheme.surfaceVariant
+                                  color: theme.colorScheme.surfaceContainerHighest
                                       .withOpacity(isDark ? 0.35 : 0.55),
                                   borderRadius: BorderRadius.circular(14.r),
                                 ),
