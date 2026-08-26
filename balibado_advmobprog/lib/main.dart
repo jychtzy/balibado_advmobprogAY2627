@@ -1,26 +1,25 @@
-// packages
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 
-// screens
+import 'screens/splash_screen.dart';
+import 'screens/signin_screen.dart';
 import 'screens/home_screen.dart';
-import 'screens/settings_screen.dart'; // Enhancement 3: Added import for SettingsScreen
+import 'screens/settings_screen.dart';
 
-// providers
 import 'providers/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]).then(
-    (_) async {
-      await dotenv.load(fileName: 'assets/.env');
-      runApp(const BalibadoAdvMobProg());
-    },
-  );
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]).then((
+    _,
+  ) async {
+    await dotenv.load(fileName: 'assets/.env');
+    runApp(const BalibadoAdvMobProg());
+  });
 }
 
 class BalibadoAdvMobProg extends StatelessWidget {
@@ -42,10 +41,11 @@ class BalibadoAdvMobProg extends StatelessWidget {
             darkTheme: themeModel.darkTheme,
             themeMode: themeModel.isDark ? ThemeMode.dark : ThemeMode.light,
             title: 'E-Commerce App',
-            initialRoute: '/home',
+            initialRoute: '/',
             routes: {
+              '/': (context) => const SplashScreen(),
+              '/signin': (context) => const SignInScreen(),
               '/home': (context) => const HomeScreen(),
-              // Enhancement 3: Route for settings page where theme toggle resides
               '/settings': (context) => const SettingsScreen(),
             },
           );

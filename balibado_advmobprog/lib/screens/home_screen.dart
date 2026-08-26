@@ -3,19 +3,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 
 import 'product_screen.dart';
 import 'cart_screen.dart';
-import '../widgets/custom_text.dart';
-
-// =====================================================================
-// BONUS: the chat FloatingActionButton has been removed entirely — no
-// more floatingActionButton, no more chat SnackBar stub, no more
-// "hide while on Cart tab" logic (there's nothing left to hide). The
-// bottom nav goes back to being the only navigation surface.
-//
-// Design: AppBar/BottomNavigationBar now come from the shared
-// AppTheme (see constants/app_theme.dart) instead of a locally
-// hardcoded _brandColor, so this screen automatically follows the
-// light/dark theme instead of always forcing indigo.
-// =====================================================================
+import 'profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String username;
@@ -29,11 +17,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int _selectedIndex = 0;
   final PageController _pageController = PageController();
 
-  // Index of the Cart tab, used only for the AppBar title now.
   static const int _cartIndex = 1;
-
-  // Profile tab
-  static const int _profileIndex = 2;
+  static const Color _brandColor = Color(0xFF313376);
 
   @override
   Widget build(BuildContext context) {
@@ -41,21 +26,23 @@ class _HomeScreenState extends State<HomeScreen> {
       canPop: false,
       child: Scaffold(
         appBar: AppBar(
+          backgroundColor: _brandColor,
+          iconTheme: const IconThemeData(color: Colors.white),
           automaticallyImplyLeading: false,
+          elevation: 2,
           title: _selectedIndex == 0
-              ? Image.asset(
-                  'assets/images/nubdexchange_logo.png',
-                  scale: 11.sp,
-                )
-              : CustomText(
-                  text: _selectedIndex == _cartIndex ? 'Cart' : 'Profile',
-                  fontSize: 20.sp,
-                  fontWeight: FontWeight.w600,
+              ? Image.asset('assets/images/nubdexchange_logo.png', scale: 11.sp)
+              : Text(
+                  _selectedIndex == _cartIndex ? 'Cart' : 'Profile',
+                  style: TextStyle(
+                    fontSize: 20.sp,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
                 ),
           actions: [
             IconButton(
-              icon: Icon(Icons.settings, size: 24.sp),
-              // Settings icon now leads to settings screen
+              icon: Icon(Icons.settings, size: 24.sp, color: Colors.white),
               onPressed: () => Navigator.pushNamed(context, '/settings'),
             ),
           ],
@@ -63,13 +50,10 @@ class _HomeScreenState extends State<HomeScreen> {
         body: PageView(
           physics: const NeverScrollableScrollPhysics(),
           controller: _pageController,
-          children: <Widget>[
-            const ProductScreen(),
-            const CartScreen(),
-            // Profile screen - placeholder
-            Center(
-              child: CustomText(text: 'Profile', fontSize: 16.sp),
-            ),
+          children: const <Widget>[
+            ProductScreen(),
+            CartScreen(),
+            ProfileScreen(),
           ],
           onPageChanged: (page) {
             setState(() {
@@ -77,9 +61,22 @@ class _HomeScreenState extends State<HomeScreen> {
             });
           },
         ),
+        floatingActionButton: _selectedIndex == _cartIndex
+            ? null
+            : FloatingActionButton(
+                backgroundColor: _brandColor,
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Chat is unavailable')),
+                  );
+                },
+                child: const Icon(Icons.chat, color: Colors.white),
+              ),
         bottomNavigationBar: BottomNavigationBar(
           showSelectedLabels: false,
           showUnselectedLabels: false,
+          selectedItemColor: _brandColor,
+          unselectedItemColor: Colors.grey,
           onTap: _onTappedBar,
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.shop_2), label: 'Shop'),
@@ -87,10 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icon(Icons.shopping_cart),
               label: 'Cart',
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person),
-              label: 'Profile',
-            ),
+            BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
           ],
           currentIndex: _selectedIndex,
         ),
@@ -99,9 +93,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onTappedBar(int value) {
-    // Profile tab - placeholder
-    if (value == _profileIndex) return;
-
     setState(() {
       _selectedIndex = value;
     });
