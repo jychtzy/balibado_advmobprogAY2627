@@ -31,9 +31,9 @@ class _SignInScreenState extends State<SignInScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await _userService.login(
-        _usernameController.text.trim(),
-        _passwordController.text,
+      await _userService.signIn(
+        email: _usernameController.text.trim(),
+        password: _passwordController.text,
       );
 
       if (!mounted) return;

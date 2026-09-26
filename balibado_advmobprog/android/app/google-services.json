@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "617614728952",
+    "project_id": "balibado-firebase",
+    "storage_bucket": "balibado-firebase.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:617614728952:android:9c4ed2a7c51120eccaa50d",
+        "android_client_info": {
+          "package_name": "com.example.balibado_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDbtUkQSVciTx5fDFC9C6LBxzfsMxOGDys"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -16,7 +16,7 @@ class AppColors {
 }
 
 // =====================================================================
-// ENHANCEMENTS / FIXES IN THIS FILE
+// ENHANCEMENTS / 
 // ---------------------------------------------------------------------
 // Enhancement 1: Cart renders from /carts/user/{id} and items open
 //                ProductDetailsScreen — but ONLY via the explicit

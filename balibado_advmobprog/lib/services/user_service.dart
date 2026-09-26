@@ -1,53 +1,66 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-import '../models/user.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
+
+ValueNotifier<UserService> userService = ValueNotifier(UserService());
 
 class UserService {
-  static const String _userKey = 'user';
-  static const String _loginUrl = 'https://dummyjson.com/auth/login';
+  final FirebaseAuth firebaseAuth = FirebaseAuth.instance;
 
-  Future<User> login(String username, String password) async {
-    final response = await http.post(
-      Uri.parse(_loginUrl),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'username': username,
-        'password': password,
-      }),
+  User? get currentUser => firebaseAuth.currentUser;
+
+  Stream<User?> get authStateChanges => firebaseAuth.authStateChanges();
+
+  Future<UserCredential> signIn({
+    required String email,
+    required String password,
+  }) async {
+    return await firebaseAuth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
     );
-
-    if (response.statusCode != 200) {
-      throw Exception('Invalid username or password.');
-    }
-
-    final Map<String, dynamic> json = jsonDecode(response.body);
-    final user = User.fromJson(json);
-
-    // Persist immediately so ProfileScreen's getUser() can find it.
-    await saveUser(user);
-
-    return user;
   }
 
-  Future<User> getUser() async {
-    final prefs = await SharedPreferences.getInstance();
-    final userJson = prefs.getString(_userKey);
-    if (userJson == null) {
-      throw Exception('No user data found in storage.');
-    }
-    final Map<String, dynamic> map = jsonDecode(userJson);
-    return User.fromJson(map);
+  Future<UserCredential> createAccount({
+    required String email,
+    required String password,
+  }) async {
+    return await firebaseAuth.createUserWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
   }
 
-  Future<void> saveUser(User user) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_userKey, jsonEncode(user.toJson()));
+  Future<void> signOut() async {
+    await firebaseAuth.signOut();
   }
 
-  Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_userKey);
-    // remove any auth token keys here too, if you store them separately
+  Future<void> updateUsername({required String username}) async {
+    await currentUser!.updateDisplayName(username);
+  }
+
+  Future<void> deleteAccount({
+    required String email,
+    required String password,
+  }) async {
+    AuthCredential credential = EmailAuthProvider.credential(
+      email: email,
+      password: password,
+    );
+    await currentUser!.reauthenticateWithCredential(credential);
+    await currentUser!.delete();
+    await firebaseAuth.signOut();
+  }
+
+  Future<void> resetPasswordFromCurrentPassword({
+    required String currentPassword,
+    required String newPassword,
+    required String email,
+  }) async {
+    AuthCredential credential = EmailAuthProvider.credential(
+      email: email,
+      password: currentPassword,
+    );
+    await currentUser!.reauthenticateWithCredential(credential);
+    await currentUser!.updatePassword(newPassword);
   }
 }

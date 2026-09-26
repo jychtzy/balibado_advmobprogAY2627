@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../services/user_service.dart';
-
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -10,8 +8,6 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  final UserService _userService = UserService();
-
   static const Color _brandColor = Color(0xFF313376);
 
   @override
@@ -23,15 +19,7 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _checkAuthentication() async {
     await Future.delayed(const Duration(milliseconds: 1500));
     if (!mounted) return;
-
-    try {
-      await _userService.getUser();
-      if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/home');
-    } catch (_) {
-      if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/signin');
-    }
+    Navigator.pushReplacementNamed(context, '/signin');
   }
 
   @override
